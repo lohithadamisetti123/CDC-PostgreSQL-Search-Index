@@ -84,7 +84,7 @@ You should see all services `Up` and `healthy`:
 - `cdc-meilisearch`
 - `cdc-redis`
 - `cdc-consumer`
-- `cdc-api-frontend` [web:132]
+- `cdc-api-frontend`
 
 ---
 
@@ -97,7 +97,7 @@ docker exec -it cdc-postgres \
   psql -U cdc_user -d cdc_db -c "SELECT count(*) FROM products;"
 ```
 
-Expected: count ≥ `10000`. [web:17][web:133]
+Expected: count ≥ `10000`.
 
 ---
 
@@ -110,8 +110,7 @@ curl 'http://localhost:7700/indexes' \
   -H 'Authorization: Bearer master_key_placeholder'
 ```
 
-You should see a `products` index. [web:22][web:140]
-
+You should see a `products` index.
 List a few documents:
 
 ```bash
@@ -119,7 +118,7 @@ curl 'http://localhost:7700/indexes/products/documents?limit=3' \
   -H 'Authorization: Bearer master_key_placeholder'
 ```
 
-Expected: 3 product documents and `total` ≈ `10000+`. [web:39]
+Expected: 3 product documents and `total` ≈ `10000+`.
 
 ---
 
@@ -141,7 +140,7 @@ Search for it via the API:
 curl "http://localhost:8000/api/search?q=CDC%20Final%20UI%20Test%203"
 ```
 
-Expected: the product appears in `hits` with the correct name and price, proving CDC → Meilisearch → API works. [web:16]
+Expected: the product appears in `hits` with the correct name and price, proving CDC → Meilisearch → API works. 
 
 ---
 
@@ -160,7 +159,7 @@ event: cdc_event
 data: {"table":"products","operation":"TICK","timestamp":"2026-03-20T05:58:32.973Z","counter":0}
 ```
 
-A new `cdc_event` appears every 2 seconds. This is consumed by the frontend to drive the **Live CDC Feed** and live indicator. [web:107][web:142]
+A new `cdc_event` appears every 2 seconds. This is consumed by the frontend to drive the **Live CDC Feed** and live indicator. 
 
 ---
 
@@ -225,9 +224,9 @@ docker-compose down
 
 [Watch the demo video](https://your-video-link.example.com)
 
-
+---
 ## Notes & Trade‑offs
 
-- The CDC consumer focuses on the `products` table and builds a denormalized document using joins to `categories` and `inventory`. [web:143]
+- The CDC consumer focuses on the `products` table and builds a denormalized document using joins to `categories` and `inventory`. 
 - A one‑time bulk index is performed on startup to ensure Meilisearch has all existing rows before live CDC takes over.
 - The SSE endpoint currently streams synthetic **TICK** events at 2‑second intervals to keep the UI live and demonstrate real‑time behavior; the underlying CDC → Meilisearch pipeline is tested via actual product inserts and search.
