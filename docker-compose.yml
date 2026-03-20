@@ -1,0 +1,128 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:14
+    container_name: cdc-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    command: >
+      postgres
+      -c wal_level=logical
+      -c max_wal_senders=10
+      -c max_replication_slots=10
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.12.3
+    container_name: cdc-meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+    # Internal port is 7700, we map host ${MEILI_PORT} to container 7700
+    ports:
+      - "${MEILI_PORT}:7700"
+    volumes:
+      - meili_data:/meili_data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    container_name: cdc-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  cdc-consumer:
+    build:
+      context: ./cdc-consumer
+      dockerfile: Dockerfile
+    container_name: cdc-consumer
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      CDC_PG_HOST: ${CDC_PG_HOST}
+      CDC_PG_PORT: ${CDC_PG_PORT}
+      CDC_PG_USER: ${CDC_PG_USER}
+      CDC_PG_PASSWORD: ${CDC_PG_PASSWORD}
+      CDC_PG_DB: ${CDC_PG_DB}
+      CDC_REPLICATION_SLOT: ${CDC_REPLICATION_SLOT}
+      CDC_PUBLICATION_NAME: ${CDC_PUBLICATION_NAME}
+      CDC_LSN_CHECKPOINT_FILE: ${CDC_LSN_CHECKPOINT_FILE}
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      MEILI_INDEX_NAME: ${MEILI_INDEX_NAME}
+      MEILI_HOST: "http://meilisearch:7700"
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_CHANNEL: ${REDIS_CHANNEL}
+    volumes:
+      - cdc_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/cdc_ready && echo 'ok' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./api-frontend
+      dockerfile: Dockerfile
+    container_name: cdc-api-frontend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      API_PORT: ${API_PORT}
+      API_HOST: ${API_HOST}
+      API_REDIS_HOST: ${API_REDIS_HOST}
+      API_REDIS_PORT: ${API_REDIS_PORT}
+      API_REDIS_CHANNEL: ${API_REDIS_CHANNEL}
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      MEILI_INDEX_NAME: ${MEILI_INDEX_NAME}
+      MEILI_HOST: "http://meilisearch:7700"
+    ports:
+      - "${API_PORT}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+
+
+volumes:
+  pgdata:
+  meili_data:
+  cdc_data:

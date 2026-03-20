@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>CDC Pipeline Dashboard</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+      .container {
+        display: flex;
+        gap: 20px;
+      }
+      .column {
+        flex: 1;
+        border: 1px solid #ccc;
+        padding: 10px;
+      }
+      #live-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: red;
+        display: inline-block;
+        margin-left: 8px;
+      }
+      .live {
+        background-color: green !important;
+      }
+      .cdc-event {
+        font-size: 12px;
+        border-bottom: 1px solid #eee;
+        padding: 4px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>CDC PostgreSQL → Search Index</h1>
+    <div>
+      Live CDC Status:
+      <div id="live-indicator" data-testid="live-indicator"></div>
+    </div>
+
+    <div class="container">
+      <div class="column">
+        <h2>Search</h2>
+        <input
+          data-testid="search-input"
+          id="search-input"
+          type="text"
+          placeholder="Search products..."
+        />
+        <br /><br />
+        <label>
+          Category:
+          <select id="category-filter">
+            <option value="">All</option>
+            <option value="Electronics">Electronics</option>
+            <option value="Books">Books</option>
+            <option value="Clothing">Clothing</option>
+            <option value="Home">Home</option>
+            <option value="Sports">Sports</option>
+          </select>
+        </label>
+        <br /><br />
+        <label>
+          <input type="checkbox" id="in-stock-toggle" /> In stock only
+        </label>
+
+        <h3>Results</h3>
+        <div data-testid="search-results" id="search-results"></div>
+      </div>
+
+      <div class="column">
+        <h2>Live CDC Feed</h2>
+        <div data-testid="cdc-feed" id="cdc-feed"></div>
+      </div>
+    </div>
+
+    <script>
+      const searchInput = document.getElementById("search-input");
+      const resultsContainer = document.getElementById("search-results");
+      const categoryFilter = document.getElementById("category-filter");
+      const inStockToggle = document.getElementById("in-stock-toggle");
+      const cdcFeed = document.getElementById("cdc-feed");
+      const liveIndicator = document.getElementById("live-indicator");
+
+      let searchTimeout = null;
+
+      function debounceSearch() {
+        if (searchTimeout) clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(runSearch, 300);
+      }
+
+      async function runSearch() {
+        const q = searchInput.value;
+        const category = categoryFilter.value;
+        const inStock = inStockToggle.checked;
+
+        const params = new URLSearchParams();
+        if (q) params.append("q", q);
+        if (category) params.append("category", category);
+        if (inStock) params.append("inStock", "true");
+
+        try {
+          const res = await fetch(`/api/search?${params.toString()}`);
+          const data = await res.json();
+
+          resultsContainer.innerHTML = "";
+          (data.hits || []).forEach((hit) => {
+            const div = document.createElement("div");
+            div.style.borderBottom = "1px solid #eee";
+            div.style.padding = "4px 0";
+            div.innerHTML = `
+              <strong>${hit.name}</strong><br/>
+              Category: ${hit.category || "N/A"}<br/>
+              Price: ${hit.price}<br/>
+              In stock: ${hit.in_stock ? "Yes" : "No"} (qty: ${hit.quantity})
+            `;
+            resultsContainer.appendChild(div);
+          });
+        } catch (err) {
+          console.error("Search error", err);
+        }
+      }
+
+      searchInput.addEventListener("input", debounceSearch);
+      categoryFilter.addEventListener("change", debounceSearch);
+      inStockToggle.addEventListener("change", debounceSearch);
+
+      // SSE setup
+      function flashLiveIndicator() {
+        liveIndicator.classList.add("live");
+        setTimeout(() => liveIndicator.classList.remove("live"), 500);
+      }
+
+      function initSSE() {
+        const es = new EventSource("/api/cdc-stream");
+        es.addEventListener("cdc_event", (event) => {
+          flashLiveIndicator();
+          try {
+            const data = JSON.parse(event.data);
+            const div = document.createElement("div");
+            div.className = "cdc-event";
+            div.textContent = `${data.timestamp} - ${data.table} - ${data.operation}`;
+            cdcFeed.prepend(div);
+          } catch (e) {
+            console.error("Invalid CDC event", e);
+          }
+        });
+        es.onerror = (err) => {
+          console.error("SSE error", err);
+        };
+      }
+
+      initSSE();
+      runSearch();
+    </script>
+  </body>
+</html>
