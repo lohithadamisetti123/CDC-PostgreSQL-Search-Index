@@ -222,7 +222,7 @@ docker-compose down
 ## Demo Video
 
 
-[Watch the demo video](https://your-video-link.example.com)
+[Watch the demo video👉](https://youtu.be/jMSUAdGzWyo?si=xUmKk9BmlBjv7hRU)
 
 ---
 ## Notes & Trade‑offs
